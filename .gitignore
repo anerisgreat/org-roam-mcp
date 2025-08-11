@@ -1,0 +1,36 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+config.json
+secrets.yaml
+credentials.json
+
+# Virtual environments
+venv/
+env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+.coverage
+htmlcov/
