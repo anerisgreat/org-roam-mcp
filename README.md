@@ -9,6 +9,20 @@ A Model Context Protocol (MCP) server that enables Claude Code and other MCP cli
 - **Full Integration**: Respects org-roam's file structure, UUID system, and conventions
 - **Auto-Detection**: Automatically finds your org-roam database and directory
 - **Fast Search**: Leverages org-roam's SQLite database for efficient queries
+- **Robust Error Handling**: Comprehensive input validation and descriptive error messages
+- **Path Normalization**: Handles quoted/unquoted file paths and node IDs consistently
+- **Database Synchronization**: Automatic refresh after file operations for immediate updates
+
+## Recent Improvements
+
+### v0.2.0 - Enhanced Reliability (Latest)
+
+- **🔧 Fixed File Path Handling**: Resolved issues with quoted file paths from the org-roam database
+- **🆔 Improved Node ID Support**: Now handles both quoted and unquoted node ID formats seamlessly  
+- **🔄 Enhanced Search Synchronization**: Database automatically refreshes after create/update operations
+- **✅ Better Error Handling**: Added comprehensive input validation with clear error messages
+- **🧹 Path Cleaning**: Automatic normalization of file paths with quote removal
+- **📝 Improved Logging**: Better error reporting and debugging information
 
 ## Installation
 
