@@ -139,7 +139,7 @@ class OrgRoamDatabase:
         
         return [
             OrgRoamNode(
-                id=row['id'],
+                id=self._clean_string(row['id']),
                 file=self._clean_path(row['file']),
                 level=row['level'],
                 pos=row['pos'],
@@ -163,8 +163,8 @@ class OrgRoamDatabase:
         Returns:
             OrgRoamNode if found, None otherwise
         """
-        # Strip quotes if present to handle both formats
-        clean_node_id = node_id.strip('"')
+        # Normalize input ID - add quotes if not present, as DB stores quoted IDs
+        search_id = node_id if node_id.startswith('"') and node_id.endswith('"') else f'"{node_id}"'
         
         query = """
         SELECT id, file, level, pos, todo, priority, scheduled, deadline,
@@ -173,14 +173,14 @@ class OrgRoamDatabase:
         WHERE id = ?
         """
         
-        cursor = self.conn.execute(query, (clean_node_id,))
+        cursor = self.conn.execute(query, (search_id,))
         row = cursor.fetchone()
         
         if not row:
             return None
         
         return OrgRoamNode(
-            id=row['id'],
+            id=self._clean_string(row['id']),
             file=self._clean_path(row['file']),
             level=row['level'],
             pos=row['pos'],
@@ -224,7 +224,7 @@ class OrgRoamDatabase:
         
         return [
             OrgRoamNode(
-                id=row['id'],
+                id=self._clean_string(row['id']),
                 file=self._clean_path(row['file']),
                 level=row['level'],
                 pos=row['pos'],
@@ -248,8 +248,8 @@ class OrgRoamDatabase:
         Returns:
             List of OrgRoamLink objects
         """
-        # Strip quotes if present to handle both formats
-        clean_node_id = node_id.strip('"')
+        # Normalize input ID - add quotes if not present, as DB stores quoted IDs
+        search_id = node_id if node_id.startswith('"') and node_id.endswith('"') else f'"{node_id}"'
         
         query = """
         SELECT pos, source, dest, type, properties
@@ -257,7 +257,7 @@ class OrgRoamDatabase:
         WHERE dest = ?
         """
         
-        cursor = self.conn.execute(query, (clean_node_id,))
+        cursor = self.conn.execute(query, (search_id,))
         rows = cursor.fetchall()
         
         return [
@@ -280,8 +280,8 @@ class OrgRoamDatabase:
         Returns:
             List of OrgRoamLink objects
         """
-        # Strip quotes if present to handle both formats
-        clean_node_id = node_id.strip('"')
+        # Normalize input ID - add quotes if not present, as DB stores quoted IDs
+        search_id = node_id if node_id.startswith('"') and node_id.endswith('"') else f'"{node_id}"'
         
         query = """
         SELECT pos, source, dest, type, properties
@@ -289,7 +289,7 @@ class OrgRoamDatabase:
         WHERE source = ?
         """
         
-        cursor = self.conn.execute(query, (clean_node_id,))
+        cursor = self.conn.execute(query, (search_id,))
         rows = cursor.fetchall()
         
         return [
@@ -312,10 +312,10 @@ class OrgRoamDatabase:
         Returns:
             List of tag strings
         """
-        # Strip quotes if present to handle both formats
-        clean_node_id = node_id.strip('"')
+        # Normalize input ID - add quotes if not present, as DB stores quoted IDs
+        search_id = node_id if node_id.startswith('"') and node_id.endswith('"') else f'"{node_id}"'
         query = "SELECT tag FROM tags WHERE node_id = ?"
-        cursor = self.conn.execute(query, (clean_node_id,))
+        cursor = self.conn.execute(query, (search_id,))
         return [row['tag'] for row in cursor.fetchall()]
     
     def get_node_aliases(self, node_id: str) -> List[str]:
@@ -327,10 +327,10 @@ class OrgRoamDatabase:
         Returns:
             List of alias strings
         """
-        # Strip quotes if present to handle both formats
-        clean_node_id = node_id.strip('"')
+        # Normalize input ID - add quotes if not present, as DB stores quoted IDs
+        search_id = node_id if node_id.startswith('"') and node_id.endswith('"') else f'"{node_id}"'
         query = "SELECT alias FROM aliases WHERE node_id = ?"
-        cursor = self.conn.execute(query, (clean_node_id,))
+        cursor = self.conn.execute(query, (search_id,))
         return [row['alias'] for row in cursor.fetchall()]
     
     def get_all_files(self) -> List[OrgRoamFile]:
