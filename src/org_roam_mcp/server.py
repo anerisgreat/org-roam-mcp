@@ -237,7 +237,24 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
         query = arguments["query"]
         limit = arguments.get("limit", 50)
         
-        nodes = db.search_nodes(query, limit=limit)
+        # Input validation
+        if not query or not isinstance(query, str):
+            return [types.TextContent(
+                type="text",
+                text=json.dumps({
+                    "error": "Query must be a non-empty string"
+                })
+            )]
+        
+        if not isinstance(limit, int) or limit < 1 or limit > 1000:
+            return [types.TextContent(
+                type="text", 
+                text=json.dumps({
+                    "error": "Limit must be an integer between 1 and 1000"
+                })
+            )]
+        
+        nodes = db.search_nodes(query.strip(), limit=limit)
         results = []
         
         for node in nodes:
@@ -263,6 +280,16 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
     
     elif name == "get_node":
         node_id = arguments["node_id"]
+        
+        # Input validation
+        if not node_id or not isinstance(node_id, str):
+            return [types.TextContent(
+                type="text",
+                text=json.dumps({
+                    "error": "Node ID must be a non-empty string"
+                })
+            )]
+        
         node = db.get_node_by_id(node_id)
         
         if not node:
@@ -326,18 +353,59 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
         content = arguments.get("content", "")
         tags = arguments.get("tags", [])
         
-        # Create the node using file manager
-        node_id = file_manager.create_node(title, content, tags)
+        # Input validation
+        if not title or not isinstance(title, str):
+            return [types.TextContent(
+                type="text",
+                text=json.dumps({
+                    "success": False,
+                    "error": "Title must be a non-empty string"
+                })
+            )]
         
-        return [types.TextContent(
-            type="text",
-            text=json.dumps({
-                "success": True,
-                "node_id": node_id,
-                "title": title,
-                "message": f"Created new node: {title}"
-            }, indent=2)
-        )]
+        if not isinstance(content, str):
+            return [types.TextContent(
+                type="text",
+                text=json.dumps({
+                    "success": False,
+                    "error": "Content must be a string"
+                })
+            )]
+        
+        if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+            return [types.TextContent(
+                type="text",
+                text=json.dumps({
+                    "success": False,
+                    "error": "Tags must be a list of strings"
+                })
+            )]
+        
+        try:
+            # Create the node using file manager
+            node_id = file_manager.create_node(title.strip(), content, tags)
+            
+            # Refresh database connection to pick up the new node
+            db.refresh_connection()
+            
+            return [types.TextContent(
+                type="text",
+                text=json.dumps({
+                    "success": True,
+                    "node_id": node_id,
+                    "title": title,
+                    "message": f"Created new node: {title}"
+                }, indent=2)
+            )]
+        except Exception as e:
+            logger.error(f"Error creating node '{title}': {e}")
+            return [types.TextContent(
+                type="text",
+                text=json.dumps({
+                    "success": False,
+                    "error": f"Failed to create node: {str(e)}"
+                })
+            )]
     
     elif name == "update_node":
         node_id = arguments["node_id"]
@@ -356,6 +424,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
         
         try:
             file_manager.update_node_content(node, new_content)
+            # Refresh database connection to pick up changes
+            db.refresh_connection()
             return [types.TextContent(
                 type="text",
                 text=json.dumps({
@@ -405,6 +475,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
                 target_node_id, 
                 target_node.title or "Untitled"
             )
+            # Refresh database connection to pick up new links
+            db.refresh_connection()
             return [types.TextContent(
                 type="text",
                 text=json.dumps({

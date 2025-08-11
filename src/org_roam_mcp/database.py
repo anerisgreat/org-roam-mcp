@@ -89,6 +89,32 @@ class OrgRoamDatabase:
         if self.conn:
             self.conn.close()
     
+    def _clean_path(self, path: Optional[str]) -> Optional[str]:
+        """Clean file path by removing quotes if present.
+        
+        Args:
+            path: File path that may have quotes
+            
+        Returns:
+            Clean file path without quotes
+        """
+        if not path:
+            return path
+        return path.strip('"')
+    
+    def _clean_string(self, value: Optional[str]) -> Optional[str]:
+        """Clean string value by removing quotes if present.
+        
+        Args:
+            value: String value that may have quotes
+            
+        Returns:
+            Clean string without quotes
+        """
+        if not value:
+            return value
+        return value.strip('"')
+    
     def get_all_nodes(self, limit: Optional[int] = None) -> List[OrgRoamNode]:
         """Get all nodes from the database.
         
@@ -114,14 +140,14 @@ class OrgRoamDatabase:
         return [
             OrgRoamNode(
                 id=row['id'],
-                file=row['file'],
+                file=self._clean_path(row['file']),
                 level=row['level'],
                 pos=row['pos'],
                 todo=row['todo'],
                 priority=row['priority'],
                 scheduled=row['scheduled'],
                 deadline=row['deadline'],
-                title=row['title'],
+                title=self._clean_string(row['title']),
                 properties=row['properties'],
                 olp=row['olp']
             )
@@ -132,11 +158,14 @@ class OrgRoamDatabase:
         """Get a specific node by ID.
         
         Args:
-            node_id: The node ID to search for
+            node_id: The node ID to search for (with or without quotes)
             
         Returns:
             OrgRoamNode if found, None otherwise
         """
+        # Strip quotes if present to handle both formats
+        clean_node_id = node_id.strip('"')
+        
         query = """
         SELECT id, file, level, pos, todo, priority, scheduled, deadline,
                title, properties, olp
@@ -144,7 +173,7 @@ class OrgRoamDatabase:
         WHERE id = ?
         """
         
-        cursor = self.conn.execute(query, (node_id,))
+        cursor = self.conn.execute(query, (clean_node_id,))
         row = cursor.fetchone()
         
         if not row:
@@ -152,14 +181,14 @@ class OrgRoamDatabase:
         
         return OrgRoamNode(
             id=row['id'],
-            file=row['file'],
+            file=self._clean_path(row['file']),
             level=row['level'],
             pos=row['pos'],
             todo=row['todo'],
             priority=row['priority'],
             scheduled=row['scheduled'],
             deadline=row['deadline'],
-            title=row['title'],
+            title=self._clean_string(row['title']),
             properties=row['properties'],
             olp=row['olp']
         )
@@ -196,14 +225,14 @@ class OrgRoamDatabase:
         return [
             OrgRoamNode(
                 id=row['id'],
-                file=row['file'],
+                file=self._clean_path(row['file']),
                 level=row['level'],
                 pos=row['pos'],
                 todo=row['todo'],
                 priority=row['priority'],
                 scheduled=row['scheduled'],
                 deadline=row['deadline'],
-                title=row['title'],
+                title=self._clean_string(row['title']),
                 properties=row['properties'],
                 olp=row['olp']
             )
@@ -214,18 +243,21 @@ class OrgRoamDatabase:
         """Get all links pointing to a specific node.
         
         Args:
-            node_id: The target node ID
+            node_id: The target node ID (with or without quotes)
             
         Returns:
             List of OrgRoamLink objects
         """
+        # Strip quotes if present to handle both formats
+        clean_node_id = node_id.strip('"')
+        
         query = """
         SELECT pos, source, dest, type, properties
         FROM links
         WHERE dest = ?
         """
         
-        cursor = self.conn.execute(query, (node_id,))
+        cursor = self.conn.execute(query, (clean_node_id,))
         rows = cursor.fetchall()
         
         return [
@@ -243,18 +275,21 @@ class OrgRoamDatabase:
         """Get all links from a specific node.
         
         Args:
-            node_id: The source node ID
+            node_id: The source node ID (with or without quotes)
             
         Returns:
             List of OrgRoamLink objects
         """
+        # Strip quotes if present to handle both formats
+        clean_node_id = node_id.strip('"')
+        
         query = """
         SELECT pos, source, dest, type, properties
         FROM links
         WHERE source = ?
         """
         
-        cursor = self.conn.execute(query, (node_id,))
+        cursor = self.conn.execute(query, (clean_node_id,))
         rows = cursor.fetchall()
         
         return [
@@ -272,26 +307,30 @@ class OrgRoamDatabase:
         """Get tags for a specific node.
         
         Args:
-            node_id: The node ID
+            node_id: The node ID (with or without quotes)
             
         Returns:
             List of tag strings
         """
+        # Strip quotes if present to handle both formats
+        clean_node_id = node_id.strip('"')
         query = "SELECT tag FROM tags WHERE node_id = ?"
-        cursor = self.conn.execute(query, (node_id,))
+        cursor = self.conn.execute(query, (clean_node_id,))
         return [row['tag'] for row in cursor.fetchall()]
     
     def get_node_aliases(self, node_id: str) -> List[str]:
         """Get aliases for a specific node.
         
         Args:
-            node_id: The node ID
+            node_id: The node ID (with or without quotes)
             
         Returns:
             List of alias strings
         """
+        # Strip quotes if present to handle both formats
+        clean_node_id = node_id.strip('"')
         query = "SELECT alias FROM aliases WHERE node_id = ?"
-        cursor = self.conn.execute(query, (node_id,))
+        cursor = self.conn.execute(query, (clean_node_id,))
         return [row['alias'] for row in cursor.fetchall()]
     
     def get_all_files(self) -> List[OrgRoamFile]:
@@ -344,3 +383,14 @@ class OrgRoamDatabase:
         stats['aliases'] = cursor.fetchone()['count']
         
         return stats
+    
+    def refresh_connection(self):
+        """Refresh the database connection to pick up external changes.
+        
+        This is useful when the org-roam database is modified externally
+        (e.g., by Emacs) and we need to see the latest changes.
+        """
+        if self.conn:
+            self.conn.close()
+        self._connect()
+        logger.info("Database connection refreshed")

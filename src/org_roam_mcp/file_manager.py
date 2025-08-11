@@ -33,23 +33,26 @@ class OrgRoamFileManager:
         """Read content of an org file.
         
         Args:
-            file_path: Path to the org file
+            file_path: Path to the org file (may have quotes)
             
         Returns:
             File content as string
         """
         try:
-            # Handle both absolute and relative paths
-            if not os.path.isabs(file_path):
-                file_path = os.path.join(self.config.org_roam_directory, file_path)
+            # Clean file path by removing quotes if present
+            clean_path = file_path.strip('"') if file_path else ""
             
-            with open(file_path, 'r', encoding='utf-8') as f:
+            # Handle both absolute and relative paths
+            if not os.path.isabs(clean_path):
+                clean_path = os.path.join(self.config.org_roam_directory, clean_path)
+            
+            with open(clean_path, 'r', encoding='utf-8') as f:
                 return f.read()
         except FileNotFoundError:
-            logger.warning(f"File not found: {file_path}")
+            logger.warning(f"File not found: {clean_path}")
             return ""
         except Exception as e:
-            logger.error(f"Error reading file {file_path}: {e}")
+            logger.error(f"Error reading file {clean_path}: {e}")
             return ""
     
     def read_node_content(self, node: OrgRoamNode) -> str:
@@ -164,19 +167,22 @@ class OrgRoamFileManager:
         """Update entire file content.
         
         Args:
-            file_path: Path to the file
+            file_path: Path to the file (may have quotes)
             new_content: New content
         """
         try:
-            # Handle both absolute and relative paths
-            if not os.path.isabs(file_path):
-                file_path = os.path.join(self.config.org_roam_directory, file_path)
+            # Clean file path by removing quotes if present
+            clean_path = file_path.strip('"') if file_path else ""
             
-            with open(file_path, 'w', encoding='utf-8') as f:
+            # Handle both absolute and relative paths
+            if not os.path.isabs(clean_path):
+                clean_path = os.path.join(self.config.org_roam_directory, clean_path)
+            
+            with open(clean_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
-            logger.info(f"Updated file content: {file_path}")
+            logger.info(f"Updated file content: {clean_path}")
         except Exception as e:
-            logger.error(f"Error updating file {file_path}: {e}")
+            logger.error(f"Error updating file {clean_path}: {e}")
             raise
     
     def _update_heading_content(self, node: OrgRoamNode, new_content: str):
