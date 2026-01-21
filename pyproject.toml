@@ -9,7 +9,7 @@ description = "Model Context Protocol server for org-roam knowledge base integra
 authors = [{name = "User"}]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.0.0",
     "pydantic>=2.0.0",
@@ -37,18 +37,27 @@ packages = ["src/org_roam_mcp"]
 exclude = [
     "/.github",
     "/tests",
+    "/scripts",
+    "/.claude",
+    "/venv",
+    "enhanced_orchestrator.sh",
 ]
 
 [tool.black]
 line-length = 100
-target-version = ['py38']
+target-version = ['py310']
 
 [tool.isort]
 profile = "black"
 line_length = 100
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
+exclude = ["scripts/", "tests/"]
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
