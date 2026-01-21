@@ -17,18 +17,14 @@ def temp_org_dir():
         yield tmp_dir
 
 
-@pytest.fixture 
+@pytest.fixture
 def config(temp_org_dir):
     """Create test configuration."""
     # Create a dummy database file
     db_path = os.path.join(temp_org_dir, "org-roam.db")
     Path(db_path).touch()
-    
-    return OrgRoamConfig(
-        db_path=db_path,
-        org_roam_directory=temp_org_dir,
-        max_search_results=50
-    )
+
+    return OrgRoamConfig(db_path=db_path, org_roam_directory=temp_org_dir, max_search_results=50)
 
 
 @pytest.fixture
@@ -51,9 +47,9 @@ def test_create_org_content(file_manager):
     title = "Test Title"
     content = "This is test content"
     tags = ["tag1", "tag2"]
-    
+
     org_content = file_manager._create_org_content(node_id, title, content, tags)
-    
+
     assert ":PROPERTIES:" in org_content
     assert f":ID: {node_id}" in org_content
     assert f"#+title: {title}" in org_content
@@ -66,17 +62,17 @@ def test_create_node(file_manager):
     title = "Test Node"
     content = "Test content here"
     tags = ["test", "node"]
-    
+
     node_id = file_manager.create_node(title, content, tags)
-    
+
     # Verify UUID format
     assert len(node_id) == 36
-    assert node_id.count('-') == 4
-    
+    assert node_id.count("-") == 4
+
     # Check file was created
     org_files = file_manager.list_org_files()
     assert len(org_files) == 1
-    
+
     # Check content
     created_file = org_files[0]
     content_read = file_manager.read_file_content(created_file)
@@ -90,14 +86,14 @@ def test_read_file_content(file_manager):
     # Create a test file
     test_file = Path(file_manager.config.org_roam_directory) / "test.org"
     test_content = ":PROPERTIES:\n:ID: test-123\n:END:\n#+title: Test\n\nContent here"
-    
-    with open(test_file, 'w') as f:
+
+    with open(test_file, "w") as f:
         f.write(test_content)
-    
+
     # Test reading
     content = file_manager.read_file_content("test.org")
     assert content == test_content
-    
+
     # Test reading non-existent file
     content = file_manager.read_file_content("nonexistent.org")
     assert content == ""
@@ -115,12 +111,12 @@ def test_get_file_metadata(file_manager):
 #+filetags: :meta::test:
 
 Some content here"""
-    
-    with open(test_file, 'w') as f:
+
+    with open(test_file, "w") as f:
         f.write(content)
-    
+
     metadata = file_manager.get_file_metadata("metadata_test.org")
-    
+
     assert metadata["ID"] == "test-id-456"
     assert metadata["title"] == "Metadata Test"
     assert "meta" in metadata["tags"]
@@ -132,17 +128,17 @@ def test_list_org_files(file_manager):
     """Test listing org files."""
     # Create some test files
     test_files = ["note1.org", "note2.org", "subdir/note3.org"]
-    
+
     for file_path in test_files:
         full_path = Path(file_manager.config.org_roam_directory) / file_path
         full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_text("#+title: Test")
-    
+
     # Also create a non-org file
     (Path(file_manager.config.org_roam_directory) / "not_org.txt").write_text("not org")
-    
+
     org_files = file_manager.list_org_files()
-    
+
     assert len(org_files) == 3
     assert "note1.org" in org_files
     assert "note2.org" in org_files
@@ -160,14 +156,14 @@ def test_read_node_content(file_manager):
 #+title: File Level Node
 
 File level content here."""
-    
-    with open(test_file, 'w') as f:
+
+    with open(test_file, "w") as f:
         f.write(content)
-    
+
     # Test file-level node
     node = OrgRoamNode(
         id="file-level-id",
-        file="node_test.org", 
+        file="node_test.org",
         level=0,
         pos=0,
         todo=None,
@@ -176,9 +172,9 @@ File level content here."""
         deadline=None,
         title="File Level Node",
         properties=None,
-        olp=None
+        olp=None,
     )
-    
+
     node_content = file_manager.read_node_content(node)
     assert "File Level Node" in node_content
     assert "File level content" in node_content
@@ -189,14 +185,14 @@ def test_update_file_content(file_manager):
     # Create test file
     test_file = Path(file_manager.config.org_roam_directory) / "update_test.org"
     original_content = ":PROPERTIES:\n:ID: update-test\n:END\n#+title: Original"
-    
-    with open(test_file, 'w') as f:
+
+    with open(test_file, "w") as f:
         f.write(original_content)
-    
+
     # Update content
     new_content = ":PROPERTIES:\n:ID: update-test\n:END:\n#+title: Updated\n\nNew content!"
     file_manager._update_file_content("update_test.org", new_content)
-    
+
     # Verify update
     updated_content = file_manager.read_file_content("update_test.org")
     assert "Updated" in updated_content
