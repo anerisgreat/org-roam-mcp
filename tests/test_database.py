@@ -19,8 +19,7 @@ def mock_db_path():
     conn = sqlite3.connect(db_path)
 
     # Create tables
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE files (
             file TEXT PRIMARY KEY,
             title TEXT,
@@ -28,11 +27,9 @@ def mock_db_path():
             atime INTEGER NOT NULL,
             mtime INTEGER NOT NULL
         )
-    """
-    )
+    """)
 
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE nodes (
             id TEXT PRIMARY KEY,
             file TEXT NOT NULL,
@@ -47,11 +44,9 @@ def mock_db_path():
             olp TEXT,
             FOREIGN KEY (file) REFERENCES files (file) ON DELETE CASCADE
         )
-    """
-    )
+    """)
 
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE links (
             pos INTEGER NOT NULL,
             source TEXT NOT NULL,
@@ -60,28 +55,23 @@ def mock_db_path():
             properties TEXT NOT NULL,
             FOREIGN KEY (source) REFERENCES nodes (id) ON DELETE CASCADE
         )
-    """
-    )
+    """)
 
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE tags (
             node_id TEXT NOT NULL,
             tag TEXT,
             FOREIGN KEY (node_id) REFERENCES nodes (id) ON DELETE CASCADE
         )
-    """
-    )
+    """)
 
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE aliases (
             node_id TEXT NOT NULL,
             alias TEXT,
             FOREIGN KEY (node_id) REFERENCES nodes (id) ON DELETE CASCADE
         )
-    """
-    )
+    """)
 
     # Insert test data
     test_file = "/tmp/test.org"

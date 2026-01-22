@@ -259,7 +259,6 @@ class OrgRoamFileManager:
         source_file: str,
         target_node_id: str,
         target_title: str,
-
         position: Optional[int] = None,
     ) -> None:
         """Add a link from one node to another.

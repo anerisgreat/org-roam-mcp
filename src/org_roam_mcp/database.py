@@ -141,7 +141,7 @@ class OrgRoamDatabase:
 
         if not self.conn:
             raise RuntimeError("Database connection not established")
-            
+
         cursor = self.conn.execute(query)
         rows = cursor.fetchall()
 
@@ -335,10 +335,10 @@ class OrgRoamDatabase:
         # Normalize input ID - add quotes if not present, as DB stores quoted IDs
         search_id = node_id if node_id.startswith('"') and node_id.endswith('"') else f'"{node_id}"'
         query = "SELECT tag FROM tags WHERE node_id = ?"
-        
+
         if not self.conn:
             raise RuntimeError("Database connection not established")
-            
+
         cursor = self.conn.execute(query, (search_id,))
         return [row["tag"] for row in cursor.fetchall()]
 
@@ -354,10 +354,10 @@ class OrgRoamDatabase:
         # Normalize input ID - add quotes if not present, as DB stores quoted IDs
         search_id = node_id if node_id.startswith('"') and node_id.endswith('"') else f'"{node_id}"'
         query = "SELECT alias FROM aliases WHERE node_id = ?"
-        
+
         if not self.conn:
             raise RuntimeError("Database connection not established")
-            
+
         cursor = self.conn.execute(query, (search_id,))
         return [row["alias"] for row in cursor.fetchall()]
 
@@ -368,10 +368,10 @@ class OrgRoamDatabase:
             List of OrgRoamFile objects
         """
         query = "SELECT file, title, hash, atime, mtime FROM files ORDER BY file"
-        
+
         if not self.conn:
             raise RuntimeError("Database connection not established")
-            
+
         cursor = self.conn.execute(query)
         rows = cursor.fetchall()
 
