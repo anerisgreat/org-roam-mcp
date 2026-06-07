@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import subprocess
 from typing import Any, Dict, List, Optional
 import json
 
@@ -25,6 +26,24 @@ server = Server("org-roam-mcp")
 config: Optional[OrgRoamConfig] = None
 db: Optional[OrgRoamDatabase] = None
 file_manager: Optional[OrgRoamFileManager] = None
+
+
+def _emacs_db_sync() -> None:
+    """Ask Emacs to sync the org-roam DB, then refresh our SQLite connection.
+
+    Silently no-ops if emacsclient is unavailable or Emacs isn't running,
+    so the server works in headless environments too.
+    """
+    try:
+        subprocess.run(
+            ["emacsclient", "--no-wait", "-e", "(org-roam-db-sync)"],
+            timeout=10,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    if db:
+        db.refresh_connection()
 
 
 @server.list_resources()  # type: ignore
@@ -358,8 +377,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
             # Create the node using file manager
             node_id = file_manager.create_node(title.strip(), content, tags)
 
-            # Refresh database connection to pick up the new node
-            db.refresh_connection()
+            # Sync org-roam DB in Emacs so the new node is immediately searchable
+            _emacs_db_sync()
 
             return [
                 types.TextContent(
@@ -402,8 +421,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
 
         try:
             file_manager.update_node_content(node_to_update, new_content)
-            # Refresh database connection to pick up changes
-            db.refresh_connection()
+            # Sync org-roam DB in Emacs so the updated node is immediately searchable
+            _emacs_db_sync()
             return [
                 types.TextContent(
                     type="text",
@@ -454,8 +473,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
             file_manager.add_link_to_node(
                 source_node.file, target_node_id, target_node.title or "Untitled"
             )
-            # Refresh database connection to pick up new links
-            db.refresh_connection()
+            # Sync org-roam DB in Emacs so the new link is immediately searchable
+            _emacs_db_sync()
             return [
                 types.TextContent(
                     type="text",
