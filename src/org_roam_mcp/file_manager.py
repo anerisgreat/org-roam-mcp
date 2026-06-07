@@ -5,7 +5,7 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 import logging
 
 from .config import OrgRoamConfig
@@ -109,7 +109,9 @@ class OrgRoamFileManager:
 
         return "\n".join(lines[start_line:end_line])
 
-    def create_node(self, title: str, content: str = "", tags: Optional[List[str]] = None) -> str:
+    def create_node(
+        self, title: str, content: str = "", tags: Optional[List[str]] = None
+    ) -> Tuple[str, str]:
         """Create a new org-roam node.
 
         Args:
@@ -118,7 +120,7 @@ class OrgRoamFileManager:
             tags: List of tags
 
         Returns:
-            Generated node ID
+            Tuple of (node_id, absolute_file_path)
         """
         if tags is None:
             tags = []
@@ -144,7 +146,7 @@ class OrgRoamFileManager:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(org_content)
             logger.info(f"Created new org-roam node: {file_path}")
-            return node_id
+            return node_id, str(file_path)
         except Exception as e:
             logger.error(f"Error creating node file {file_path}: {e}")
             raise

@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import subprocess
 from typing import Any, Dict, List, Optional
 import json
 
@@ -27,23 +26,6 @@ config: Optional[OrgRoamConfig] = None
 db: Optional[OrgRoamDatabase] = None
 file_manager: Optional[OrgRoamFileManager] = None
 
-
-def _emacs_db_sync() -> None:
-    """Ask Emacs to sync the org-roam DB, then refresh our SQLite connection.
-
-    Silently no-ops if emacsclient is unavailable or Emacs isn't running,
-    so the server works in headless environments too.
-    """
-    try:
-        subprocess.run(
-            ["emacsclient", "--no-wait", "-e", "(org-roam-db-sync)"],
-            timeout=10,
-            capture_output=True,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    if db:
-        db.refresh_connection()
 
 
 @server.list_resources()  # type: ignore
@@ -375,10 +357,10 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
 
         try:
             # Create the node using file manager
-            node_id = file_manager.create_node(title.strip(), content, tags)
+            node_id, file_path = file_manager.create_node(title.strip(), content, tags)
 
-            # Sync org-roam DB in Emacs so the new node is immediately searchable
-            _emacs_db_sync()
+            # Write node directly into the SQLite DB — no Emacs required
+            db.insert_file_node(file_path, node_id, title.strip(), tags)
 
             return [
                 types.TextContent(
@@ -421,8 +403,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
 
         try:
             file_manager.update_node_content(node_to_update, new_content)
-            # Sync org-roam DB in Emacs so the updated node is immediately searchable
-            _emacs_db_sync()
+            # Update the file hash so Emacs re-indexes on next sync
+            db.update_file_hash(node_to_update.file)
             return [
                 types.TextContent(
                     type="text",
@@ -473,8 +455,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
             file_manager.add_link_to_node(
                 source_node.file, target_node_id, target_node.title or "Untitled"
             )
-            # Sync org-roam DB in Emacs so the new link is immediately searchable
-            _emacs_db_sync()
+            # Update the file hash so Emacs re-indexes the new link on next sync
+            db.update_file_hash(source_node.file)
             return [
                 types.TextContent(
                     type="text",

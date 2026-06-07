@@ -1,5 +1,6 @@
 """Database interface for org-roam SQLite database."""
 
+import hashlib
 import sqlite3
 import os
 from pathlib import Path
@@ -418,6 +419,82 @@ class OrgRoamDatabase:
         stats["aliases"] = cursor.fetchone()["count"]
 
         return stats
+
+    @staticmethod
+    def _file_sha1(file_path: str) -> str:
+        """SHA1 of file contents, matching org-roam-db--file-hash."""
+        with open(file_path, "rb") as f:
+            return hashlib.sha1(f.read()).hexdigest()
+
+    @staticmethod
+    def _emacs_time(t: float) -> str:
+        """Convert a Unix timestamp to the Emacs (HIGH LOW USEC PSEC) tuple string."""
+        secs = int(t)
+        frac = t - secs
+        usecs = int(frac * 1_000_000)
+        psecs = int((frac * 1_000_000 - usecs) * 1_000_000)
+        return f"({secs >> 16} {secs & 0xFFFF} {usecs} {psecs})"
+
+    def insert_file_node(
+        self, file_path: str, node_id: str, title: str, tags: List[str]
+    ) -> None:
+        """Insert a newly created file-level node directly into the DB.
+
+        Replicates what org-roam-db-update-file does for a simple file-level
+        node, without requiring Emacs to be running.
+        """
+        if not self.conn:
+            raise RuntimeError("Database connection not established")
+
+        content_hash = self._file_sha1(file_path)
+        stat = os.stat(file_path)
+        atime = self._emacs_time(stat.st_atime)
+        mtime = self._emacs_time(stat.st_mtime)
+
+        stem = os.path.splitext(os.path.basename(file_path))[0]
+        properties = (
+            f'(("CATEGORY" . "{stem}") ("ID" . "{node_id}") '
+            f'("BLOCKED" . "") ("FILE" . "{file_path}") ("PRIORITY" . "B"))'
+        )
+
+        # emacsql wraps all Emacs string values in "..." inside the SQLite cell
+        q_id = f'"{node_id}"'
+        q_file = f'"{file_path}"'
+        q_title = f'"{title}"'
+
+        self.conn.execute(
+            "INSERT OR REPLACE INTO files (file, title, hash, atime, mtime) VALUES (?, ?, ?, ?, ?)",
+            (q_file, q_title, content_hash, atime, mtime),
+        )
+        self.conn.execute(
+            "INSERT OR REPLACE INTO nodes "
+            "(id, file, level, pos, todo, priority, scheduled, deadline, title, properties, olp) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (q_id, q_file, 0, 1, None, None, None, None, q_title, properties, None),
+        )
+        for tag in tags:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO tags (node_id, tag) VALUES (?, ?)",
+                (q_id, tag),
+            )
+        self.conn.commit()
+        logger.info(f"Inserted file node '{title}' ({node_id}) into DB directly")
+
+    def update_file_hash(self, file_path: str) -> None:
+        """Update the hash for an existing file so Emacs re-indexes it on next sync."""
+        if not self.conn:
+            raise RuntimeError("Database connection not established")
+
+        content_hash = self._file_sha1(file_path)
+        stat = os.stat(file_path)
+        mtime = self._emacs_time(stat.st_mtime)
+        q_file = f'"{file_path}"'
+
+        self.conn.execute(
+            "UPDATE files SET hash = ?, mtime = ? WHERE file = ?",
+            (content_hash, mtime, q_file),
+        )
+        self.conn.commit()
 
     def refresh_connection(self) -> None:
         """Refresh the database connection to pick up external changes.
