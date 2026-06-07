@@ -28,7 +28,7 @@ dev = [
 ]
 
 [project.scripts]
-org-roam-mcp = "org_roam_mcp.server:main"
+org-roam-mcp = "org_roam_mcp.server:cli_main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/org_roam_mcp"]
