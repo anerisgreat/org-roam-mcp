@@ -197,6 +197,20 @@ async def handle_list_tools() -> List[types.Tool]:
             },
         ),
         types.Tool(
+            name="get_node_by_title",
+            description="Get a node by exact title, returning full content in one call. Use instead of search_nodes + get_node when you know the exact title.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "The exact title of the node to retrieve",
+                    }
+                },
+                "required": ["title"],
+            },
+        ),
+        types.Tool(
             name="list_files",
             description="List all org files in the org-roam directory",
             inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
@@ -283,6 +297,47 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
         content = file_manager.read_node_content(fetched_node)
 
         result = {
+            "id": fetched_node.id,
+            "title": fetched_node.title,
+            "file": fetched_node.file,
+            "level": fetched_node.level,
+            "content": content,
+            "tags": tags,
+            "aliases": aliases,
+            "backlinks_count": len(backlinks),
+            "forward_links_count": len(forward_links),
+        }
+
+        return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    elif name == "get_node_by_title":
+        title = arguments["title"]
+
+        if not title or not isinstance(title, str):
+            return [
+                types.TextContent(
+                    type="text", text=json.dumps({"error": "Title must be a non-empty string"})
+                )
+            ]
+
+        fetched_node = db.get_node_by_title(title)
+
+        if not fetched_node:
+            return [
+                types.TextContent(
+                    type="text", text=json.dumps({"found": False, "title": title})
+                )
+            ]
+
+        node_id = fetched_node.id
+        tags = db.get_node_tags(node_id)
+        aliases = db.get_node_aliases(node_id)
+        backlinks = db.get_backlinks(node_id)
+        forward_links = db.get_forward_links(node_id)
+        content = file_manager.read_node_content(fetched_node)
+
+        result = {
+            "found": True,
             "id": fetched_node.id,
             "title": fetched_node.title,
             "file": fetched_node.file,

@@ -205,6 +205,49 @@ class OrgRoamDatabase:
             olp=row["olp"],
         )
 
+    def get_node_by_title(self, title: str) -> Optional[OrgRoamNode]:
+        """Get a node by exact title match.
+
+        Args:
+            title: The exact title to search for
+
+        Returns:
+            OrgRoamNode if found, None otherwise
+        """
+        # Titles are stored with surrounding quotes in the DB (emacsql encoding)
+        q_title = f'"{title}"'
+
+        query = """
+        SELECT id, file, level, pos, todo, priority, scheduled, deadline,
+               title, properties, olp
+        FROM nodes
+        WHERE title = ? OR title = ?
+        LIMIT 1
+        """
+
+        if not self.conn:
+            raise RuntimeError("Database connection not established")
+
+        cursor = self.conn.execute(query, (q_title, title))
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        return OrgRoamNode(
+            id=self._clean_string(row["id"]),
+            file=self._clean_path(row["file"]),
+            level=row["level"],
+            pos=row["pos"],
+            todo=row["todo"],
+            priority=row["priority"],
+            scheduled=row["scheduled"],
+            deadline=row["deadline"],
+            title=self._clean_string(row["title"]),
+            properties=row["properties"],
+            olp=row["olp"],
+        )
+
     def search_nodes(self, query: str, limit: Optional[int] = None) -> List[OrgRoamNode]:
         """Search nodes by title, aliases, or tags.
 
