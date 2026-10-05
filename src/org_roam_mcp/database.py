@@ -1,6 +1,7 @@
 """Database interface for org-roam SQLite database."""
 
 import hashlib
+import re
 import sqlite3
 import os
 from pathlib import Path
@@ -518,26 +519,105 @@ class OrgRoamDatabase:
         for tag in tags:
             self.conn.execute(
                 "INSERT OR REPLACE INTO tags (node_id, tag) VALUES (?, ?)",
-                (q_id, tag),
+                (q_id, f'"{tag}"'),
             )
         self.conn.commit()
         logger.info(f"Inserted file node '{title}' ({node_id}) into DB directly")
 
-    def update_file_hash(self, file_path: str) -> None:
-        """Update the hash for an existing file so Emacs re-indexes it on next sync."""
+    def resync_file_node(self, file_path: str) -> Optional[str]:
+        """Re-derive one file-level node's hash/title/tags/links from disk.
+
+        Replaces update_file_hash(), which only touched the files.hash column
+        and left tags/links stale forever: writing the post-edit hash tells
+        org-roam-db-sync "nothing changed here", so it would never reparse
+        the file and pick up tags/links either — the opposite of the intent.
+        This mirrors what org-roam-db-update-file does for a simple
+        file-level node (project-brain's only node shape: one node per
+        file), without requiring Emacs to be running.
+
+        Returns the node id, or None if the file has no :ID: property
+        (not an org-roam node, e.g. a stray non-roam file under the hook's
+        path filter).
+        """
         if not self.conn:
             raise RuntimeError("Database connection not established")
 
-        content_hash = self._file_sha1(file_path)
-        stat = os.stat(file_path)
-        mtime = self._emacs_time(stat.st_mtime)
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        id_match = re.search(r"^\s*:ID:\s*(\S+)\s*$", content, re.MULTILINE)
+        if not id_match:
+            return None
+        node_id = id_match.group(1)
+        q_id = f'"{node_id}"'
         q_file = f'"{file_path}"'
 
-        self.conn.execute(
-            "UPDATE files SET hash = ?, mtime = ? WHERE file = ?",
-            (content_hash, mtime, q_file),
+        content_hash = f'"{hashlib.sha1(content.encode("utf-8")).hexdigest()}"'
+        stat = os.stat(file_path)
+        mtime = self._emacs_time(stat.st_mtime)
+
+        title_match = re.search(r"^\s*#\+title:\s*(.+)$", content, re.MULTILINE | re.IGNORECASE)
+        title = (
+            title_match.group(1).strip()
+            if title_match
+            else os.path.splitext(os.path.basename(file_path))[0]
         )
+        q_title = f'"{title}"'
+
+        self.conn.execute(
+            "UPDATE files SET title = ?, hash = ?, mtime = ? WHERE file = ?",
+            (q_title, content_hash, mtime, q_file),
+        )
+        self.conn.execute("UPDATE nodes SET title = ? WHERE id = ?", (q_title, q_id))
+
+        tags_match = re.search(r"^\s*#\+filetags:\s*(.+)$", content, re.MULTILINE | re.IGNORECASE)
+        # ":alpha:beta:".split(":") after stripping the outer colons -- not
+        # re.findall(r":([^:]+):", ...), which drops every other tag because
+        # consecutive tags share a colon and matches can't overlap.
+        tags = (
+            [t for t in tags_match.group(1).strip().strip(":").split(":") if t]
+            if tags_match
+            else []
+        )
+        self.conn.execute("DELETE FROM tags WHERE node_id = ?", (q_id,))
+        for tag in tags:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO tags (node_id, tag) VALUES (?, ?)", (q_id, f'"{tag}"')
+            )
+
+        # Re-derive forward id-links, tracking the enclosing heading path
+        # (:outline) the same way org-roam's own parser would.
+        self.conn.execute("DELETE FROM links WHERE source = ?", (q_id,))
+        heading_stack: List[str] = []
+        offset = 0
+        for line in content.splitlines(keepends=True):
+            heading_match = re.match(r"^(\*+)\s+(.*)$", line)
+            if heading_match:
+                level = len(heading_match.group(1))
+                heading_stack = heading_stack[: level - 1] + [heading_match.group(2).strip()]
+            else:
+                for link_match in re.finditer(r"\[\[id:([0-9a-fA-F-]+)\](?:\[[^\]]*\])?\]", line):
+                    outline = (
+                        "(" + " ".join(f'"{h}"' for h in heading_stack) + ")"
+                        if heading_stack
+                        else "nil"
+                    )
+                    self.conn.execute(
+                        "INSERT INTO links (pos, source, dest, type, properties) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (
+                            offset + link_match.start() + 1,
+                            q_id,
+                            f'"{link_match.group(1)}"',
+                            '"id"',
+                            f"(:outline {outline})",
+                        ),
+                    )
+            offset += len(line)
+
         self.conn.commit()
+        logger.info(f"Resynced file node '{title}' ({node_id}) directly")
+        return node_id
 
     def refresh_connection(self) -> None:
         """Refresh the database connection to pick up external changes.

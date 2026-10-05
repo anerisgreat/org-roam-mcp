@@ -63,7 +63,7 @@ def test_create_node(file_manager):
     content = "Test content here"
     tags = ["test", "node"]
 
-    node_id = file_manager.create_node(title, content, tags)
+    node_id, _ = file_manager.create_node(title, content, tags)
 
     # Verify UUID format
     assert len(node_id) == 36

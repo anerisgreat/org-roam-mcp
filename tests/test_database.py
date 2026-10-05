@@ -184,3 +184,77 @@ def test_auto_detect_database():
     # This should raise FileNotFoundError since no standard paths exist
     with pytest.raises(FileNotFoundError):
         OrgRoamDatabase()
+
+
+def test_resync_file_node(mock_db_path):
+    """resync_file_node re-derives hash/title/tags/links from disk content."""
+    db = OrgRoamDatabase(mock_db_path)
+
+    node_id = "resync-node-id"
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".org", delete=False, encoding="utf-8"
+    ) as tmp:
+        tmp.write(
+            ":PROPERTIES:\n"
+            f":ID: {node_id}\n"
+            ":END:\n"
+            "#+title: Resync Test\n"
+            "#+filetags: :alpha:beta:\n\n"
+            "** Subnodes\n"
+            "[[id:d23011c5-d925-4f14-b05a-0a1f4bdbe860][Other Node]]\n"
+        )
+        org_file = tmp.name
+
+    try:
+        q_id = f'"{node_id}"'
+        q_file = f'"{org_file}"'
+        db.conn.execute(
+            "INSERT INTO files (file, title, hash, atime, mtime) VALUES (?, ?, ?, ?, ?)",
+            (q_file, '"old title"', "stale-hash", "0", "0"),
+        )
+        db.conn.execute(
+            """INSERT INTO nodes (id, file, level, pos, todo, priority, scheduled, deadline, title, properties, olp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (q_id, q_file, 0, 1, None, None, None, None, '"old title"', None, None),
+        )
+        db.conn.commit()
+
+        assert db.resync_file_node(org_file) == node_id
+
+        file_row = db.conn.execute(
+            "SELECT title, hash FROM files WHERE file = ?", (q_file,)
+        ).fetchone()
+        assert file_row["title"] == '"Resync Test"'
+        assert file_row["hash"].startswith('"') and file_row["hash"].endswith('"')
+        assert file_row["hash"] != "stale-hash"
+
+        node_row = db.conn.execute("SELECT title FROM nodes WHERE id = ?", (q_id,)).fetchone()
+        assert node_row["title"] == '"Resync Test"'
+
+        tags = [
+            row["tag"] for row in db.conn.execute("SELECT tag FROM tags WHERE node_id = ?", (q_id,))
+        ]
+        assert tags == ['"alpha"', '"beta"']
+
+        links = db.conn.execute(
+            "SELECT dest, type, properties FROM links WHERE source = ?", (q_id,)
+        ).fetchall()
+        assert len(links) == 1
+        assert links[0]["dest"] == '"d23011c5-d925-4f14-b05a-0a1f4bdbe860"'
+        assert links[0]["type"] == '"id"'
+        assert "Subnodes" in links[0]["properties"]
+    finally:
+        db.close()
+        os.unlink(org_file)
+
+
+def test_resync_file_node_no_id(mock_db_path, tmp_path):
+    """Files with no :ID: property (not org-roam nodes) are skipped, not errored."""
+    db = OrgRoamDatabase(mock_db_path)
+    plain_file = tmp_path / "plain.org"
+    plain_file.write_text("just some text, no properties drawer\n")
+
+    try:
+        assert db.resync_file_node(str(plain_file)) is None
+    finally:
+        db.close()

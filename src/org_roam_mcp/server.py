@@ -458,8 +458,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
 
         try:
             file_manager.update_node_content(node_to_update, new_content)
-            # Update the file hash so Emacs re-indexes on next sync
-            db.update_file_hash(node_to_update.file)
+            # Re-derive hash/title/tags/links directly; no Emacs dependency
+            db.resync_file_node(node_to_update.file)
             return [
                 types.TextContent(
                     type="text",
@@ -510,8 +510,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
             file_manager.add_link_to_node(
                 source_node.file, target_node_id, target_node.title or "Untitled"
             )
-            # Update the file hash so Emacs re-indexes the new link on next sync
-            db.update_file_hash(source_node.file)
+            # Re-derive hash/title/tags/links directly; no Emacs dependency
+            db.resync_file_node(source_node.file)
             return [
                 types.TextContent(
                     type="text",

@@ -322,8 +322,10 @@ class OrgRoamFileManager:
         tags_match = re.search(r"^\s*#\+filetags:\s*(.+)$", content, re.MULTILINE | re.IGNORECASE)
         if tags_match:
             tags_text = tags_match.group(1).strip()
-            # Parse tags in format :tag1::tag2:
-            tags = re.findall(r":([^:]+):", tags_text)
+            # Format is :tag1:tag2: -- adjacent tags share a colon, so
+            # re.findall(r":([^:]+):", ...) would drop every other tag
+            # (matches can't overlap on that shared colon).
+            tags = [t for t in tags_text.strip(":").split(":") if t]
             metadata["tags"] = tags
 
         return metadata
