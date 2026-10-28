@@ -5,8 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional
 import json
 
-from mcp.server import Server, NotificationOptions
-from mcp.server.models import InitializationOptions
+from mcp.server import Server, ServerRequestContext
 import mcp.server.stdio
 import mcp.types as types
 
@@ -18,36 +17,30 @@ from .file_manager import OrgRoamFileManager
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize server
-server = Server("org-roam-mcp")
-
 # Global variables for database and config
 config: Optional[OrgRoamConfig] = None
 db: Optional[OrgRoamDatabase] = None
 file_manager: Optional[OrgRoamFileManager] = None
 
 
-
-@server.list_resources()  # type: ignore
 async def handle_list_resources() -> List[types.Resource]:
     """List available org-roam resources."""
     return [
         types.Resource(
-            uri="org-roam://nodes",  # type: ignore
+            uri="org-roam://nodes",
             name="All Nodes",
             description="All nodes in the org-roam database",
-            mimeType="application/json",
+            mime_type="application/json",
         ),
         types.Resource(
-            uri="org-roam://stats",  # type: ignore
+            uri="org-roam://stats",
             name="Database Statistics",
             description="Statistics about the org-roam database",
-            mimeType="application/json",
+            mime_type="application/json",
         ),
     ]
 
 
-@server.read_resource()  # type: ignore
 async def handle_read_resource(uri: str) -> str:
     """Read org-roam resources."""
     if not db:
@@ -108,14 +101,13 @@ async def handle_read_resource(uri: str) -> str:
         raise ValueError(f"Unknown resource: {uri}")
 
 
-@server.list_tools()  # type: ignore
 async def handle_list_tools() -> List[types.Tool]:
     """List available tools."""
     return [
         types.Tool(
             name="search_nodes",
             description="Search for nodes by title, tags, or aliases",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search query string"},
@@ -131,7 +123,7 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="get_node",
             description="Get detailed information about a specific node",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "node_id": {"type": "string", "description": "The ID of the node to retrieve"}
@@ -142,7 +134,7 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="get_backlinks",
             description="Get all nodes that link to a specific node",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "node_id": {"type": "string", "description": "The ID of the target node"}
@@ -153,7 +145,7 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="create_node",
             description="Create a new org-roam node",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "title": {"type": "string", "description": "Title of the new node"},
@@ -175,7 +167,7 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="update_node",
             description="Update content of an existing node",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "node_id": {"type": "string", "description": "ID of the node to update"},
@@ -187,7 +179,7 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="add_link",
             description="Add a link from one node to another",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "source_node_id": {"type": "string", "description": "ID of the source node"},
@@ -199,7 +191,7 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="get_node_by_title",
             description="Get a node by exact title, returning full content in one call. Use instead of search_nodes + get_node when you know the exact title.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "title": {
@@ -213,12 +205,11 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="list_files",
             description="List all org files in the org-roam directory",
-            inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
+            input_schema={"type": "object", "properties": {}, "additionalProperties": False},
         ),
     ]
 
 
-@server.call_tool()  # type: ignore
 async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.TextContent]:
     """Handle tool calls."""
     if not db:
@@ -324,9 +315,7 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
 
         if not fetched_node:
             return [
-                types.TextContent(
-                    type="text", text=json.dumps({"found": False, "title": title})
-                )
+                types.TextContent(type="text", text=json.dumps({"found": False, "title": title}))
             ]
 
         node_id = fetched_node.id
@@ -568,6 +557,53 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
         raise ValueError(f"Unknown tool: {name}")
 
 
+async def on_list_resources(
+    ctx: ServerRequestContext[Any], params: Optional[types.PaginatedRequestParams]
+) -> types.ListResourcesResult:
+    return types.ListResourcesResult(resources=await handle_list_resources())
+
+
+async def on_read_resource(
+    ctx: ServerRequestContext[Any], params: types.ReadResourceRequestParams
+) -> types.ReadResourceResult:
+    text = await handle_read_resource(params.uri)
+    return types.ReadResourceResult(
+        contents=[
+            types.TextResourceContents(uri=params.uri, mime_type="application/json", text=text)
+        ]
+    )
+
+
+async def on_list_tools(
+    ctx: ServerRequestContext[Any], params: Optional[types.PaginatedRequestParams]
+) -> types.ListToolsResult:
+    return types.ListToolsResult(tools=await handle_list_tools())
+
+
+async def on_call_tool(
+    ctx: ServerRequestContext[Any], params: types.CallToolRequestParams
+) -> types.CallToolResult:
+    # mcp 2.x no longer converts handler exceptions into tool errors for us
+    try:
+        content = await handle_call_tool(params.name, params.arguments or {})
+    except Exception as e:
+        logger.error(f"Error in tool '{params.name}': {e}")
+        return types.CallToolResult(
+            content=[types.TextContent(type="text", text=str(e))], is_error=True
+        )
+    return types.CallToolResult(content=list(content))
+
+
+server: Server[Any] = Server(
+    "org-roam-mcp",
+    version="0.1.0",
+    on_list_resources=on_list_resources,
+    on_read_resource=on_read_resource,
+    on_list_tools=on_list_tools,
+    on_call_tool=on_call_tool,
+)
+
+
 async def main() -> None:
     """Main server entry point."""
     global config, db, file_manager
@@ -598,21 +634,10 @@ async def main() -> None:
 
     # Run the server
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="org-roam-mcp",
-                server_version="0.1.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
-                ),
-            ),
-        )
+        await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
-def cli_main():
+def cli_main() -> None:
     asyncio.run(main())
 
 
